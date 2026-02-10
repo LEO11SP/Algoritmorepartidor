@@ -10,17 +10,17 @@ import tsp_base
 # Configuración
 # -----------------------------
 st.set_page_config(page_title="TSP Matrix", layout="wide")
-st.title("🧬 TSP – Evolución con PMX (8! exacto)")
+st.title("🧬 TSP – Evolución con PMX (5! exacto)")
 st.markdown("Selección sándwich + prevención de colapso genético")
 
 # -----------------------------
-# Parámetros FIJOS (por 8!)
+# Parámetros FIJOS (5!)
 # -----------------------------
-NUM_CIUDADES = 8
+NUM_CIUDADES = 5
 TAM_POB = 10
 
 with st.sidebar:
-    st.info("Experimento fijado en 8 ciudades (8! = 40,320 rutas)")
+    st.info("Experimento fijado en 5 ciudades (5! = 120 rutas)")
     GENERACIONES = st.slider("Generaciones", 10, 150, 60)
     VELOCIDAD = st.slider("Velocidad (ms)", 50, 500, 150) / 1000
     MUTACION_PROB = 0.25
@@ -58,19 +58,28 @@ def calcular_fitness(ruta):
     return costo
 
 # -----------------------------
-# Óptimo global (8!)
+# Óptimo global (5!) + log
 # -----------------------------
-def calcular_optimo_global():
+def calcular_optimo_global_verbose():
+    registros = []
     mejor = None
     mejor_costo = float('inf')
 
-    for perm in itertools.permutations(ciudades):
-        costo = calcular_fitness(list(perm))
+    for idx, perm in enumerate(itertools.permutations(ciudades), start=1):
+        ruta = list(perm)
+        costo = calcular_fitness(ruta)
+
+        registros.append([
+            idx,
+            " → ".join(f"C{i}" for i in ruta),
+            costo
+        ])
+
         if costo < mejor_costo:
             mejor_costo = costo
-            mejor = list(perm)
+            mejor = ruta
 
-    return mejor, mejor_costo
+    return mejor, mejor_costo, registros
 
 # -----------------------------
 # PMX
@@ -106,7 +115,7 @@ def mutar(ruta):
     return r
 
 # -----------------------------
-# Población inicial (sin duplicados)
+# Población inicial
 # -----------------------------
 def crear_poblacion():
     pob = []
@@ -122,7 +131,7 @@ def crear_poblacion():
 # -----------------------------
 if st.button("🚀 INICIAR SIMULACIÓN"):
 
-    optimo_global, costo_optimo = calcular_optimo_global()
+    optimo_global, costo_optimo, log_optimo = calcular_optimo_global_verbose()
     poblacion = crear_poblacion()
 
     col_tabla, col_graf = st.columns([2.3, 1])
@@ -151,13 +160,13 @@ if st.button("🚀 INICIAR SIMULACIÓN"):
         cols = [f"P{i+1}" for i in range(NUM_CIUDADES)] + ["COSTO"]
         df_view = pd.DataFrame(datos, columns=cols)
 
-        def estilo(row):
+        def estilo_ga(row):
             if row["COSTO"] == mejor_costo:
                 return ['background-color:#00ff00; color:black; font-weight:bold'] * len(row)
             return [''] * len(row)
 
         placeholder.dataframe(
-            df_view.style.apply(estilo, axis=1),
+            df_view.style.apply(estilo_ga, axis=1),
             use_container_width=True
         )
 
@@ -169,8 +178,6 @@ if st.button("🚀 INICIAR SIMULACIÓN"):
         fig, ax = plt.subplots(figsize=(4, 2.5))
         ax.plot(hist_ga, label="GA", linewidth=2)
         ax.plot(hist_opt, label="Óptimo", linestyle="--")
-        ax.set_xlabel("Generación")
-        ax.set_ylabel("Costo")
         ax.legend()
         ax.grid(True)
         grafica.pyplot(fig)
@@ -180,10 +187,7 @@ if st.button("🚀 INICIAR SIMULACIÓN"):
         i, j = 0, len(evaluados) - 1
 
         while i < j and len(nueva) < TAM_POB:
-            p1 = evaluados[i][0]
-            p2 = evaluados[j][0]
-
-            h1, h2 = pmx(p1, p2)
+            h1, h2 = pmx(evaluados[i][0], evaluados[j][0])
             h1 = mutar(h1)
             h2 = mutar(h2)
 
@@ -210,15 +214,32 @@ if st.button("🚀 INICIAR SIMULACIÓN"):
 
     with col1:
         st.subheader("🧬 Mejor solución del GA")
-        df_ga = pd.DataFrame([[f"C{i}" for i in mejor_ruta]],
-                             columns=[f"P{i+1}" for i in range(NUM_CIUDADES)])
-        st.dataframe(df_ga, use_container_width=True)
+        st.dataframe(pd.DataFrame([[f"C{i}" for i in mejor_ruta]],
+                                  columns=[f"P{i+1}" for i in range(NUM_CIUDADES)]))
         st.write(f"**Costo:** {mejor_costo}")
 
     with col2:
         st.subheader("🌍 Óptimo Global")
-        df_opt = pd.DataFrame([[f"C{i}" for i in optimo_global]],
-                              columns=[f"P{i+1}" for i in range(NUM_CIUDADES)])
-        st.dataframe(df_opt, use_container_width=True)
+        st.dataframe(pd.DataFrame([[f"C{i}" for i in optimo_global]],
+                                  columns=[f"P{i+1}" for i in range(NUM_CIUDADES)]))
         st.write(f"**Costo:** {costo_optimo}")
 
+    # -----------------------------
+    # CONSOLA DE FUERZA BRUTA (CON VERDE)
+    # -----------------------------
+    with st.expander("🖥️ Consola – Cálculo del Óptimo Global (120 permutaciones)"):
+
+        df_log = pd.DataFrame(
+            log_optimo,
+            columns=["#", "Ruta", "Costo"]
+        )
+
+        def estilo_optimo(row):
+            if row["Costo"] == costo_optimo:
+                return ['background-color:#00ff00; color:black; font-weight:bold'] * len(row)
+            return [''] * len(row)
+
+        st.dataframe(
+            df_log.style.apply(estilo_optimo, axis=1),
+            use_container_width=True
+        )
